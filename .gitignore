@@ -63,6 +63,22 @@ Thumbs.db
 .snakemake/
 *.smk.py
 
+# --- Manuscript (local only, not for public repo) ----------------------------
+manuscript/
+
+# --- LaTeX auxiliary files ---------------------------------------------------
+manuscript/*.aux
+manuscript/*.bbl
+manuscript/*.blg
+manuscript/*.out
+manuscript/*.log
+manuscript/*.toc
+manuscript/*.lof
+manuscript/*.lot
+manuscript/*.fls
+manuscript/*.fdb_latexmk
+manuscript/*.synctex.gz
+
 # --- Misc --------------------------------------------------------------------
 *.tmp
 *.bak
