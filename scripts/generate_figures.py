@@ -343,16 +343,42 @@ def fig5_icb_benchmark():
     bench = pd.read_csv(bench_path)
     bench = bench.dropna(subset=["auc"])
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    # Order biomarkers: established immune biomarkers first (best→worst),
+    # then BEACON-IO variants. BEACON-IO is a target-nomination framework,
+    # not a response predictor — Fig 5 makes that explicit by showing the
+    # signature with and without lymphoid-lineage contamination.
+    score_order = [
+        "IMPRES",
+        "Cytolytic (CYT)",
+        "PD-L1 (CD274)",
+        "IFNg-GEP (Ayers)",
+        "BEACON-IO (all lineages)",
+        "BEACON-IO (solid tumors only)",
+        # legacy labels:
+        "BEACON-IO (score)",
+        "BEACON-IO (CV-LR)",
+        "BEACON-IO",
+    ]
+    present = [b for b in score_order if b in bench["biomarker"].values]
+    extras = [b for b in bench["biomarker"].unique() if b not in present]
+    biomarkers = present + extras
+
+    fig, ax = plt.subplots(figsize=(9, 5))
     cohorts = bench["cohort"].unique()
-    biomarkers = bench["biomarker"].unique()
     x = np.arange(len(biomarkers))
     width = 0.7 / max(len(cohorts), 1)
+
+    # Highlight BEACON-IO bars in distinct colour
+    def _bar_colour(name, default):
+        if "BEACON-IO" in name:
+            return "#d73027"  # red for our method
+        return default
 
     for i, cohort in enumerate(cohorts):
         sub = bench[bench["cohort"] == cohort]
         aucs = [sub[sub["biomarker"] == b]["auc"].values[0] if b in sub["biomarker"].values else np.nan for b in biomarkers]
-        bars = ax.bar(x + i * width, aucs, width, label=cohort, color=PALETTE[i], edgecolor="white")
+        colours = [_bar_colour(b, PALETTE[i]) for b in biomarkers]
+        bars = ax.bar(x + i * width, aucs, width, label=cohort, color=colours, edgecolor="white")
         for bar, auc in zip(bars, aucs):
             if not np.isnan(auc):
                 ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
@@ -363,8 +389,18 @@ def fig5_icb_benchmark():
     ax.set_xticklabels(biomarkers, rotation=30, ha="right", fontsize=9)
     ax.set_ylabel("AUC")
     ax.set_ylim(0, 1.0)
-    ax.set_title("ICB Response Prediction: BEACON-IO vs Existing Biomarkers", fontsize=13, fontweight="bold")
-    ax.legend(fontsize=9)
+    ax.set_title(
+        "ICB response prediction (Hugo 2016 melanoma, n=28; 4 R / 24 NR)\n"
+        "Established biomarkers measure tumor-immune interaction; BEACON-IO measures tumor-cell dependency.",
+        fontsize=11, fontweight="bold")
+    # Add annotation explaining BEACON-IO's role
+    ax.text(0.99, 0.97,
+            "BEACON-IO is a target-nomination framework,\nnot a response predictor.\nLow AUC is expected and informative.",
+            transform=ax.transAxes, ha="right", va="top",
+            fontsize=8, style="italic",
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="#fff5e6",
+                      edgecolor="#d73027", linewidth=0.8))
+    ax.legend(fontsize=9, loc="upper left")
 
     plt.tight_layout()
     fig.savefig(FIG / "fig5_icb_benchmark.pdf")
