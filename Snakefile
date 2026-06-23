@@ -43,9 +43,12 @@ SKIP_CLINICAL  = config.get("skip_clinical", False)
 # ── Final target ──────────────────────────────────────────────────────────────
 
 rule all:
-    """Default target: produce the integrated BEACON-IO evidence table."""
+    """Default target: integrated evidence table plus the lineage-corrected
+    solid-tumor analysis (differential EDD, evidence ranking, Hallmark enrichment)."""
     input:
         f"{OUTPUT}/integration/beacon_io_evidence_table.csv",
+        f"{OUTPUT}/integration/beacon_io_evidence_table_solid.csv",
+        f"{OUTPUT}/integration/hallmark_enrichment_solid.csv",
 
 
 # ── Step 01: Download all datasets ───────────────────────────────────────────
@@ -100,6 +103,70 @@ rule immune_context:
         python scripts/03_immune_context.py \
             --data-dir {DATA} \
             --output-dir {OUTPUT} \
+            2>&1 | tee {log}
+        """
+
+
+# ── Step 03b: Lineage-corrected (solid-tumor) differential EDD ───────────────
+
+rule immune_context_solid:
+    """Re-derive differential EDD on solid-tumor lineages only (excludes
+    Lymphoid/Myeloid), correcting the ESTIMATE lineage confound. Uses
+    full BEACON MCMC per immune stratum."""
+    input:
+        f"{OUTPUT}/.beacon_done",
+    output:
+        diff_solid = f"{OUTPUT}/immune_context_solid/differential_edd_solid_hot_vs_cold.csv",
+        stamp      = touch(f"{OUTPUT}/.immune_solid_done"),
+    log:
+        f"{OUTPUT}/logs/03b_immune_context_solid.log",
+    threads: 12
+    shell:
+        """
+        python scripts/03b_immune_context_solid.py --n-jobs {threads} \
+            2>&1 | tee {log}
+        """
+
+
+# ── Step 08: Hallmark gene-set enrichment of corrected targets ───────────────
+
+rule hallmark:
+    """MSigDB Hallmark over-representation of lineage-corrected solid-tumor
+    immune-hot specific EDDs (orthogonal mechanistic validation)."""
+    input:
+        f"{OUTPUT}/.immune_solid_done",
+    output:
+        enrich = f"{OUTPUT}/integration/hallmark_enrichment_solid.csv",
+    log:
+        f"{OUTPUT}/logs/08_hallmark.log",
+    shell:
+        """
+        python scripts/08_hallmark_enrichment.py \
+            2>&1 | tee {log}
+        """
+
+
+# ── Step 07b: Lineage-corrected evidence integration ─────────────────────────
+
+rule integration_solid:
+    """Evidence integration using the solid-tumor differential EDD for the
+    E2 (immune-specificity) tier."""
+    input:
+        f"{OUTPUT}/.beacon_done",
+        f"{OUTPUT}/.immune_done",
+        f"{OUTPUT}/.combination_done",
+        f"{OUTPUT}/.clinical_done",
+        f"{OUTPUT}/.immune_solid_done",
+    output:
+        evidence_solid = f"{OUTPUT}/integration/beacon_io_evidence_table_solid.csv",
+    log:
+        f"{OUTPUT}/logs/07b_integration_solid.log",
+    shell:
+        """
+        python scripts/07_integration.py \
+            --output-dir {OUTPUT} \
+            --diff-edd-path {OUTPUT}/immune_context_solid/differential_edd_solid_hot_vs_cold.csv \
+            --suffix _solid \
             2>&1 | tee {log}
         """
 

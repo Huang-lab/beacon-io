@@ -421,14 +421,14 @@ def fig6_evidence_integration(evidence_path: Path | None = None,
     evidence = pd.read_csv(evidence_path)
     top = evidence.head(30).copy()
 
-    # Evidence presence matrix
+    # Evidence presence matrix — only the five populated tiers (E5 ICB-meta,
+    # E7 single-cell, E8 DGIdb were not available from public data).
     ev_tiers = {
         "E1: EDD": "E1_edd_rho",
-        "E2: Immune": "E2_delta_rho",
-        "E3: Evasion": "E3_best_rho",
+        "E2: Immune-spec.": "E2_delta_rho",
+        "E3: Evasion": "E3_evasion_rho",
         "E4: PRISM": "E4_prism_rho",
-        "E5: Survival": "E5_cox_p",
-        "E6: Druggable": "E4_n_drugs",
+        "E6: Survival": "E6_min_cox_p",
     }
 
     fig = plt.figure(figsize=(16, 10))
