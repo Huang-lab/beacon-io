@@ -48,11 +48,20 @@ def compile_evidence(
     Each evidence column is rank-normalised to [0, 1] and weighted.
     Returns DataFrame sorted by composite evidence score.
     """
-    # Start with all genes from EDD
+    # Start with BEACON-EDD evidence base. We require an E1 (EDD rho) signal
+    # so that the composite ranking is meaningful — genes with only weak
+    # immune-specific or evasion evidence (and no EDD signal) would
+    # otherwise dominate the table because the composite ignores missing
+    # tiers rather than penalising them. If no EDD evidence is provided
+    # (development scenario), fall back to the union of all evidence
+    # sources excluding the genome-wide evasion table.
     genes = set()
-    for df in [edd_results, diff_edd, evasion_corr, prism_hits, icb_meta, tcga_survival]:
-        if not df.empty and "gene" in df.columns:
-            genes.update(df["gene"].unique())
+    if not edd_results.empty and "gene" in edd_results.columns:
+        genes.update(edd_results["gene"].unique())
+    if not genes:
+        for df in [diff_edd, prism_hits, icb_meta, tcga_survival]:
+            if not df.empty and "gene" in df.columns:
+                genes.update(df["gene"].unique())
 
     master = pd.DataFrame({"gene": sorted(genes)})
 
@@ -112,12 +121,20 @@ def compile_evidence(
 
 
 def _compute_composite(master: pd.DataFrame) -> pd.DataFrame:
-    """Rank-normalise each evidence column and compute weighted composite."""
+    """Rank-normalise each evidence column and compute weighted composite.
+
+    `smaller_is_better` indicates the semantic ordering of values
+    (e.g. more negative rho = better, smaller p-value = better). For
+    each column the values are converted to a [0,1] percentile so that
+    1.0 = strongest evidence; missing values are filled to give the
+    worst possible rank (0.0) before ranking.
+    """
     score_cols = {
-        "E1_edd": ("E1_edd_rho", True),        # more negative = better -> rank ascending
-        "E2_immune_specific": ("E2_delta_rho", False),  # larger = better
+        # column, smaller_is_better (semantic)
+        "E1_edd": ("E1_edd_rho", True),        # more negative rho = better
+        "E2_immune_specific": ("E2_delta_rho", False),  # larger |delta| = better
         "E3_evasion_corr": ("E3_evasion_rho", False),
-        "E4_prism": ("E4_prism_rho", True),     # more negative = better
+        "E4_prism": ("E4_prism_rho", True),     # more negative rho = better
         "E5_icb_response": ("E5_icb_rho", True),
         "E6_tcga_survival": ("E6_min_cox_p", True),  # smaller p = better
         "E7_tumour_intrinsic": ("E7_tumour_intrinsic", False),
@@ -125,12 +142,23 @@ def _compute_composite(master: pd.DataFrame) -> pd.DataFrame:
     }
 
     composite = np.zeros(len(master))
-    for evidence_key, (col, ascending) in score_cols.items():
+    for evidence_key, (col, smaller_is_better) in score_cols.items():
         weight = EVIDENCE_WEIGHTS.get(evidence_key, 0)
         if col not in master.columns:
             continue
-        vals = master[col].fillna(0 if not ascending else 1)
-        ranked = vals.rank(ascending=ascending, pct=True)
+        # Fill missing values with a "worst" value before ranking. For
+        # smaller-is-better columns, NaN -> +inf-equivalent (large);
+        # for larger-is-better columns, NaN -> -inf-equivalent (small).
+        col_vals = master[col]
+        if smaller_is_better:
+            fill = col_vals.max(skipna=True) + 1 if pd.notna(col_vals.max()) else 1.0
+        else:
+            fill = col_vals.min(skipna=True) - 1 if pd.notna(col_vals.min()) else -1.0
+        vals = col_vals.fillna(fill)
+        # Convert to [0,1] where 1.0 = best evidence. For smaller-is-better
+        # columns, invert ranking so the smallest (most negative) values
+        # get the highest percentile.
+        ranked = vals.rank(ascending=not smaller_is_better, pct=True)
         composite += weight * ranked.values
 
     master["composite_score"] = composite

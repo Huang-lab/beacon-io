@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Step 03b: Differential EDD restricted to SOLID-tumour lineages.
+"""Step 03b: Differential EDD restricted to SOLID-tumour lineages (BEACON MCMC).
 
 Motivation: the original immune-hot stratification was confounded by
 hematopoietic cancer cell lines (Lymphoid/Myeloid OncotreeLineage),
@@ -14,17 +14,15 @@ This script:
   1. Excludes Lymphoid and Myeloid lineages
   2. Recomputes ESTIMATE immune scores on solid-tumour expression
   3. Stratifies the remaining lines into immune-hot/cold
-  4. Runs differential dependency correlation using a fast Spearman +
-     Fisher z transform on the BEACON-EDD candidate genes.
+  4. Runs differential dependency correlation using BEACON Bayesian MCMC
+     in each immune-context stratum, then compares posteriors via
+     Fisher's z (method="beacon", consistent with the parent step 03).
 
-Note: the full BEACON MCMC was used in the parent step 03; here we use
-Spearman+Fisher z because (a) the candidate genes are already BEACON-
-validated EDDs, (b) the question is which of those are differentially
-strong in solid-tumour immune-hot vs cold — a relative comparison for
-which Spearman is appropriate and ~100x faster, and (c) the resulting
-signature will be re-validated downstream in the Hugo 2016 cohort.
+Use --fast to fall back to Spearman+Fisher-z for development; the
+default is full BEACON MCMC for publication.
 """
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -37,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from beacon_io.config import CFG
 from beacon_io.utils import ensure_dir, fdr_correction, get_logger
 from data.depmap import load_cell_line_info, load_crispr, load_expression
+from immune.beacon_immune import differential_edd
 from immune.deconvolution import run_estimate, stratify_immune
 
 log = get_logger("03b_solid")
@@ -85,6 +84,12 @@ def spearman_per_group(expr, dep, ids_a, ids_b, genes):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--fast", action="store_true",
+                        help="Use Spearman+Fisher-z instead of BEACON MCMC")
+    parser.add_argument("--n-jobs", type=int, default=-1)
+    args = parser.parse_args()
+
     out = ensure_dir(Path(CFG["output_dir"]) / "immune_context_solid")
 
     log.info("Loading DepMap data")
@@ -130,15 +135,25 @@ def main():
         candidate_genes = pd.read_csv(sig_path)["gene"].unique().tolist()
         log.info("Candidate genes from significant EDD: %d", len(candidate_genes))
 
-    log.info("Running Spearman+Fisher-z differential test (solid tumours)")
     common = expr_solid.index.intersection(dep_solid.index)
     ids_hot = common.intersection(solid_status[solid_status == "immune_hot"].index)
     ids_cold = common.intersection(solid_status[solid_status == "immune_cold"].index)
     log.info("Common solid-tumour lines: hot=%d cold=%d",
              len(ids_hot), len(ids_cold))
 
-    diff = spearman_per_group(expr_solid, dep_solid, ids_hot, ids_cold,
-                              candidate_genes)
+    if args.fast:
+        log.info("Running Spearman+Fisher-z differential test (--fast)")
+        diff = spearman_per_group(expr_solid, dep_solid, ids_hot, ids_cold,
+                                  candidate_genes)
+    else:
+        log.info("Running BEACON Bayesian MCMC differential EDD (solid tumours)")
+        diff = differential_edd(
+            expr_solid, dep_solid, solid_status,
+            group_a="immune_hot", group_b="immune_cold",
+            method="beacon",
+            candidate_genes=candidate_genes,
+            n_jobs=args.n_jobs,
+        )
     diff.to_csv(out / "differential_edd_solid_hot_vs_cold.csv", index=False)
 
     n_sig = (diff["fdr"] < 0.05).sum() if not diff.empty else 0

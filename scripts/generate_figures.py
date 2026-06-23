@@ -412,9 +412,13 @@ def fig5_icb_benchmark():
 # =========================================================================
 # Fig 6: Integrated evidence — multi-tier bubble/dot plot
 # =========================================================================
-def fig6_evidence_integration():
-    log.info("Fig 6: Integrated evidence")
-    evidence = pd.read_csv(OUT / "integration/beacon_io_evidence_table.csv")
+def fig6_evidence_integration(evidence_path: Path | None = None,
+                              out_suffix: str = "",
+                              title_suffix: str = ""):
+    log.info("Fig 6: Integrated evidence (suffix=%s)", out_suffix)
+    if evidence_path is None:
+        evidence_path = OUT / "integration/beacon_io_evidence_table.csv"
+    evidence = pd.read_csv(evidence_path)
     top = evidence.head(30).copy()
 
     # Evidence presence matrix
@@ -473,12 +477,13 @@ def fig6_evidence_integration():
     for i in range(len(top)):
         ax2.axhline(i, c="lightgrey", lw=0.3)
 
-    plt.suptitle("BEACON-IO: Integrated Target Ranking", fontsize=15, fontweight="bold", y=1.01)
+    plt.suptitle(f"BEACON-IO: Integrated Target Ranking{title_suffix}",
+                 fontsize=15, fontweight="bold", y=1.01)
     plt.tight_layout()
-    fig.savefig(FIG / "fig6_evidence_integration.pdf")
-    fig.savefig(FIG / "fig6_evidence_integration.png")
+    fig.savefig(FIG / f"fig6_evidence_integration{out_suffix}.pdf")
+    fig.savefig(FIG / f"fig6_evidence_integration{out_suffix}.png")
     plt.close(fig)
-    log.info("  Saved fig6_evidence_integration")
+    log.info("  Saved fig6_evidence_integration%s", out_suffix)
 
 
 # =========================================================================
