@@ -22,7 +22,24 @@ The field urgently needs:
 
 > Tumors that evade immune attack are specifically dependent on genes driving immune evasion programmes. These immune-context-specific EDDs represent rational targets for combination with ICB — targeting the very dependencies that enable immune escape.
 
-## Three Specific Aims
+## Scope of the submitted manuscript vs. planned roadmap
+
+> **What the manuscript actually delivers** (and is reproduced by the pipeline):
+> BEACON MCMC EDD across **24 DepMap 24Q4 lineages** (CRISPR + RNA-seq); immune
+> stratification by a **mean ESTIMATE-immune-gene score** (not full deconvolution);
+> a **lineage-corrected solid-tumor differential EDD** with a posterior-difference
+> test; **PRISM 24Q2** drug-sensitivity correlation; **TCGA** survival (10 cancer
+> types); a **single** ICB cohort (Hugo 2016, *n*=28) used only to show the
+> signature is *not* a response predictor; **MSigDB Hallmark** enrichment; and a
+> **five-tier** evidence integration (E1–E4, E6).
+>
+> **Planned / not in this release** (scaffolding present in `config/`): MCPcounter/
+> CIBERSORTx deconvolution, proteomics, a 10-cohort ICB meta-analysis (tier E5),
+> single-cell compartment resolution (tier E7), and DGIdb druggability (tier E8).
+> The Aims below describe the full roadmap; items beyond the delivered scope above
+> are future work.
+
+## Three Specific Aims (full roadmap)
 
 ### Aim 1: Identify immune-context-specific expression-driven dependencies
 - Run BEACON across 17 cancer lineages (DepMap: ~1000 cell lines, CRISPR + RNA-seq + proteomics)
@@ -104,11 +121,13 @@ Each gene is scored across 8 evidence tiers (inspired by Open Targets):
 
 ```bash
 # Clone
-git clone https://github.com/your-org/beacon-io.git
+git clone https://github.com/aelmas/beacon-io.git
 cd beacon-io
 
-# Install (Python 3.10-3.12)
+# Install (Python 3.10.13 is the pinned/tested version; see requirements-lock.txt)
 pip install -e ".[all]"
+# For a bit-reproducible environment matching the manuscript:
+#   pip install -r requirements-lock.txt
 
 # Or minimal (no single-cell / GPU)
 pip install -e .

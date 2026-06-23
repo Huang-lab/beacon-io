@@ -364,7 +364,7 @@ def main():
                label=r"$p = 0.05$")
     ax.set_xlabel(r"$-\log_{10}$(p)")
     ax.set_title("Hallmark enrichment of lineage-corrected solid-tumour\n"
-                 "immune-hot specific EDDs (top-30 by |Δρ|; red = FDR<0.05)",
+                 "immune-hot specific EDDs (top-30 by |Δρ|; nominal p, none survive FDR)",
                  fontsize=11, fontweight="bold")
     ax.legend(fontsize=9, loc="lower right")
     plt.tight_layout()

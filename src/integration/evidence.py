@@ -33,6 +33,15 @@ EVIDENCE_WEIGHTS = {
 }
 
 
+def _filter_edd_lineages(edd_results, exclude_lineages):
+    """Drop excluded lineages (e.g. Lymphoid/Myeloid) from the EDD table so
+    that E1 for a solid-tumor integration reflects the strongest SOLID-lineage
+    dependency, not a hematopoietic value that the solid pipeline excluded."""
+    if not exclude_lineages or edd_results.empty or "lineage" not in edd_results.columns:
+        return edd_results
+    return edd_results[~edd_results["lineage"].isin(exclude_lineages)].copy()
+
+
 def compile_evidence(
     edd_results: pd.DataFrame,
     diff_edd: pd.DataFrame,
@@ -42,6 +51,7 @@ def compile_evidence(
     tcga_survival: pd.DataFrame,
     compartment: pd.DataFrame,
     druggability: pd.DataFrame,
+    exclude_lineages: list[str] | None = None,
 ) -> pd.DataFrame:
     """Merge all evidence streams into a single gene-level table.
 
@@ -55,6 +65,10 @@ def compile_evidence(
     # tiers rather than penalising them. If no EDD evidence is provided
     # (development scenario), fall back to the union of all evidence
     # sources excluding the genome-wide evasion table.
+    # For a solid-tumor integration, exclude hematopoietic lineages from the
+    # EDD table so E1 reflects the strongest SOLID-lineage dependency (C5 fix).
+    edd_results = _filter_edd_lineages(edd_results, exclude_lineages)
+
     genes = set()
     if not edd_results.empty and "gene" in edd_results.columns:
         genes.update(edd_results["gene"].unique())
@@ -71,9 +85,14 @@ def compile_evidence(
         e1.columns = ["gene", "E1_edd_rho"]
         master = master.merge(e1, on="gene", how="left")
 
-    # E2: Immune-specific EDD (largest absolute delta)
+    # E2: Immune-HOT-specific EDD. Directional (C2 fix): credit only genes
+    # whose dependency is STRONGER in the immune-hot stratum, i.e. the most
+    # NEGATIVE delta_rho = rho_hot - rho_cold. Genes that are cold-specific
+    # (positive delta) take their least-negative value and rank worst, so
+    # they are not rewarded as "immune-hot" targets. A separate signed column
+    # is retained for transparency.
     if not diff_edd.empty:
-        e2 = diff_edd.groupby("gene")["delta_rho"].apply(lambda x: x.abs().max()).reset_index()
+        e2 = diff_edd.groupby("gene")["delta_rho"].min().reset_index()
         e2.columns = ["gene", "E2_delta_rho"]
         master = master.merge(e2, on="gene", how="left")
 
@@ -121,18 +140,24 @@ def compile_evidence(
 
 
 def _compute_composite(master: pd.DataFrame) -> pd.DataFrame:
-    """Rank-normalise each evidence column and compute weighted composite.
+    """Rank-normalize each evidence column and compute a weighted composite.
 
-    `smaller_is_better` indicates the semantic ordering of values
-    (e.g. more negative rho = better, smaller p-value = better). For
-    each column the values are converted to a [0,1] percentile so that
-    1.0 = strongest evidence; missing values are filled to give the
-    worst possible rank (0.0) before ranking.
+    `smaller_is_better` indicates the semantic ordering (more negative rho =
+    better, smaller p-value = better, most-negative delta = more immune-hot
+    specific). Each tier is converted to a [0,1] percentile (1.0 = strongest
+    evidence) computed over the genes that HAVE that tier.
+
+    Missing tiers are treated as missing (C18 fix): rather than imputing the
+    worst rank (which conflated "no evidence" with "negative evidence" and
+    capped the composite at the sum of populated-tier weights), the composite
+    for each gene is the weight-normalized mean of the tiers it possesses, so
+    the score spans the full [0,1] range and a gene is neither penalized nor
+    rewarded merely for lacking a tier.
     """
     score_cols = {
         # column, smaller_is_better (semantic)
-        "E1_edd": ("E1_edd_rho", True),        # more negative rho = better
-        "E2_immune_specific": ("E2_delta_rho", False),  # larger |delta| = better
+        "E1_edd": ("E1_edd_rho", True),         # more negative rho = better
+        "E2_immune_specific": ("E2_delta_rho", True),   # most negative delta = most hot-specific (C2 fix)
         "E3_evasion_corr": ("E3_evasion_rho", False),
         "E4_prism": ("E4_prism_rho", True),     # more negative rho = better
         "E5_icb_response": ("E5_icb_rho", True),
@@ -141,27 +166,29 @@ def _compute_composite(master: pd.DataFrame) -> pd.DataFrame:
         "E8_druggable": ("E8_druggable", False),
     }
 
-    composite = np.zeros(len(master))
+    weighted_sum = np.zeros(len(master))
+    weight_present = np.zeros(len(master))
     for evidence_key, (col, smaller_is_better) in score_cols.items():
         weight = EVIDENCE_WEIGHTS.get(evidence_key, 0)
         if col not in master.columns:
             continue
-        # Fill missing values with a "worst" value before ranking. For
-        # smaller-is-better columns, NaN -> +inf-equivalent (large);
-        # for larger-is-better columns, NaN -> -inf-equivalent (small).
         col_vals = master[col]
-        if smaller_is_better:
-            fill = col_vals.max(skipna=True) + 1 if pd.notna(col_vals.max()) else 1.0
-        else:
-            fill = col_vals.min(skipna=True) - 1 if pd.notna(col_vals.min()) else -1.0
-        vals = col_vals.fillna(fill)
-        # Convert to [0,1] where 1.0 = best evidence. For smaller-is-better
-        # columns, invert ranking so the smallest (most negative) values
-        # get the highest percentile.
-        ranked = vals.rank(ascending=not smaller_is_better, pct=True)
-        composite += weight * ranked.values
+        present = col_vals.notna().values
+        # Percentile rank computed only over genes that have this tier;
+        # 1.0 = strongest evidence.
+        ranked = col_vals.rank(ascending=not smaller_is_better, pct=True)
+        ranked_vals = ranked.fillna(0.0).values
+        weighted_sum += weight * ranked_vals * present
+        weight_present += weight * present
 
+    # Per-gene normalization over populated tiers -> composite in [0, 1].
+    with np.errstate(invalid="ignore", divide="ignore"):
+        composite = np.where(weight_present > 0, weighted_sum / weight_present, 0.0)
     master["composite_score"] = composite
+    master["n_tiers"] = (
+        master[[c for _, (c, _) in score_cols.items() if c in master.columns]]
+        .notna().sum(axis=1).values
+    )
     return master
 
 

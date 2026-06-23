@@ -40,6 +40,9 @@ def main():
                         help="Override path for differential EDD CSV (e.g. solid-tumour-only).")
     parser.add_argument("--suffix", default="",
                         help="Suffix added to output filenames (e.g. '_solid').")
+    parser.add_argument("--exclude-heme-lineages", action="store_true",
+                        help="Exclude Lymphoid/Myeloid lineages from the E1 EDD tier "
+                             "(use for the solid-tumor integration).")
     args = parser.parse_args()
 
     base = Path(args.output_dir)
@@ -62,6 +65,7 @@ def main():
 
     # Compile
     log.info("=== Compiling multi-evidence target ranking ===")
+    exclude = ["Lymphoid", "Myeloid"] if args.exclude_heme_lineages else None
     evidence = compile_evidence(
         edd_results=edd_results,
         diff_edd=diff_edd,
@@ -71,6 +75,7 @@ def main():
         tcga_survival=tcga_survival,
         compartment=compartment,
         druggability=druggability,
+        exclude_lineages=exclude,
     )
     evidence.to_csv(out / f"beacon_io_evidence_table{suf}.csv", index=False)
     log.info("Evidence table: %d genes scored", len(evidence))

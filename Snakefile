@@ -167,6 +167,7 @@ rule integration_solid:
             --output-dir {OUTPUT} \
             --diff-edd-path {OUTPUT}/immune_context_solid/differential_edd_solid_hot_vs_cold.csv \
             --suffix _solid \
+            --exclude-heme-lineages \
             2>&1 | tee {log}
         """
 

@@ -51,6 +51,9 @@ tcga:
     - LIHC   # hepatocellular
 
 # -- Public ICB clinical cohorts ----------------------------------------------
+# NOTE (submitted scope): only the Hugo 2016 melanoma cohort (GSE78220) is
+# analyzed in the manuscript. The remaining cohorts are enumerated for a
+# planned multi-cohort meta-analysis (evidence tier E5) and are NOT used here.
 icb_cohorts:
   # Melanoma anti-PD1
   - name: "Hugo_2016_melanoma"
@@ -128,6 +131,8 @@ icb_cohorts:
     data_types: ["RNA-seq", "clinical"]
 
 # -- Single-cell RNA-seq atlases (public) -------------------------------------
+# NOTE (submitted scope): single-cell compartment analysis (evidence tier E7)
+# is PLANNED and NOT performed in the submitted manuscript.
 singlecell:
   - name: "Jerby-Arnon_2018_melanoma_ICB"
     source: "GEO:GSE115978"
@@ -165,8 +170,12 @@ beacon:
   min_cell_lines: 7
 
 # -- Immune module parameters ------------------------------------------------
+# NOTE (submitted scope): the analysis in the manuscript uses a mean-expression
+# immune-signature score over the ESTIMATE immune gene set (see Methods), NOT a
+# full deconvolution. CIBERSORTx/MCPcounter/EPIC/xCell and TIDE are scaffolding
+# for planned extensions and are NOT used in the submitted results.
 immune:
-  deconvolution_method: "CIBERSORTx"   # also supports MCPcounter, EPIC, xCell
+  deconvolution_method: "mean_immune_signature_score"  # ESTIMATE-immune-gene-subset mean (used); CIBERSORTx/MCPcounter/EPIC/xCell = planned, not used
   immune_evasion_genesets:
     - "HALLMARK_INTERFERON_GAMMA_RESPONSE"
     - "HALLMARK_INFLAMMATORY_RESPONSE"
@@ -184,6 +193,8 @@ combination:
   prism_ic50_threshold: -1.0     # log2 fold-change threshold for sensitivity
   synergy_methods: ["bliss", "hsa"]
   min_drug_targets_overlap: 2
+  # NOTE: PRISM drug-sensitivity correlation (tier E4) is used. DGIdb/DrugBank/
+  # ChEMBL/OpenTargets druggability annotation (tier E8) is PLANNED, not used.
   druggability_sources:
     - "DGIdb"
     - "DrugBank"

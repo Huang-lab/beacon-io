@@ -19,7 +19,8 @@ $PY scripts/05c_icb_benchmark_solid.py
 echo "=== [3/5] Evidence integration with corrected differential EDD ==="
 $PY scripts/07_integration.py \
     --diff-edd-path analysis/out/immune_context_solid/differential_edd_solid_hot_vs_cold.csv \
-    --suffix _solid
+    --suffix _solid \
+    --exclude-heme-lineages
 
 echo "=== [4/5] Regenerate Fig 5 (ICB benchmark, both signatures) ==="
 $PY - <<'PY'
