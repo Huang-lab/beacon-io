@@ -49,6 +49,8 @@ rule all:
         f"{OUTPUT}/integration/beacon_io_evidence_table.csv",
         f"{OUTPUT}/integration/beacon_io_evidence_table_solid.csv",
         f"{OUTPUT}/integration/hallmark_enrichment_solid.csv",
+        f"{OUTPUT}/immune_context_solid/posterior_difference_solid.csv",
+        f"{OUTPUT}/clinical/tcga_tme_corroboration.csv",
 
 
 # ── Step 01: Download all datasets ───────────────────────────────────────────
@@ -128,6 +130,22 @@ rule immune_context_solid:
         """
 
 
+# ── Step 03c: Coherent posterior-difference test for differential EDD ────────
+
+rule posterior_difference:
+    """Coherent Bayesian posterior-difference test (P(delta_rho<0|data), HDI)
+    for the lineage-corrected differential EDD, replacing Fisher-z on medians."""
+    input:
+        f"{OUTPUT}/.immune_solid_done",
+    output:
+        postdiff = f"{OUTPUT}/immune_context_solid/posterior_difference_solid.csv",
+    log:
+        f"{OUTPUT}/logs/03c_posterior_difference.log",
+    threads: 12
+    shell:
+        "python scripts/03c_posterior_difference.py 2>&1 | tee {log}"
+
+
 # ── Step 08: Hallmark gene-set enrichment of corrected targets ───────────────
 
 rule hallmark:
@@ -168,6 +186,24 @@ rule integration_solid:
             --diff-edd-path {OUTPUT}/immune_context_solid/differential_edd_solid_hot_vs_cold.csv \
             --suffix _solid \
             --exclude-heme-lineages \
+            2>&1 | tee {log}
+        """
+
+
+# ── Step 09: Real-TME corroboration (TCGA, lineage-adjusted) ─────────────────
+
+rule tcga_tme_corroboration:
+    """Test whether the lineage-corrected hot-specific hits retain an immune
+    association in real TCGA tumors after adjusting for cancer type (lineage)."""
+    input:
+        f"{OUTPUT}/immune_context_solid/posterior_difference_solid.csv",
+    output:
+        corr = f"{OUTPUT}/clinical/tcga_tme_corroboration.csv",
+    log:
+        f"{OUTPUT}/logs/09_tcga_tme_corroboration.log",
+    shell:
+        """
+        python scripts/09_tcga_tme_corroboration.py \
             2>&1 | tee {log}
         """
 
