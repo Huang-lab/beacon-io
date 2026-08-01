@@ -2,6 +2,10 @@
 # BEACON-IO .gitignore
 # =============================================================================
 
+# --- Manuscript (kept local only, never synced to the remote) ----------------
+manuscript/
+manuscript_huanglab_version/
+
 # --- Raw data (downloaded by pipeline, too large for git) -------------------
 data/raw/
 data/processed/
