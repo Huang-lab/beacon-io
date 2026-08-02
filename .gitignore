@@ -85,3 +85,7 @@ manuscript/*.synctex.gz
 *.bak
 *.orig
 nohup.out
+
+# --- Claude Code session histories (kept local only, never committed) --------
+SESSION_HISTORY*
+session_history*
